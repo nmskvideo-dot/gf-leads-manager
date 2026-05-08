@@ -1,0 +1,30 @@
+# WordPress
+wp-config.php
+wp-content/uploads/
+wp-content/plugins/*/
+wp-content/mu-plugins/*/
+.htaccess
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Composer
+vendor/
+composer.lock
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
