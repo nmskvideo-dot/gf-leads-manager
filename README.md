@@ -15,6 +15,7 @@ A WordPress plugin for managing Gravity Forms entries with an intuitive interfac
 - 👥 Access control for Administrators and Editors
 - 🎨 Seamlessly integrated with WordPress Admin panel
 - 📱 Responsive design for desktop and mobile
+- 🔄 **Automatic updates from GitHub** - Stay always up-to-date with the latest features
 
 ## Requirements
 
@@ -54,6 +55,13 @@ After activating the plugin:
 - Use checkboxes to select individual entries
 - Click the header checkbox to select/deselect all visible entries
 
+### Automatic Updates
+
+The plugin checks GitHub for updates automatically. When a new version is available:
+- WordPress will notify you on the Plugins page
+- Click "Update" to install the latest version with one click
+- The plugin maintains full compatibility across versions
+
 ## Supported Fields
 
 The plugin automatically detects common field names:
@@ -64,7 +72,7 @@ The plugin automatically detects common field names:
 
 ## Version
 
-1.6
+1.7
 
 ## Author
 
