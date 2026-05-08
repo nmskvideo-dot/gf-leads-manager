@@ -1,42 +1,42 @@
 # Leads (GF) Manager
 
-WordPress плагин для управления записями Gravity Forms. Позволяет администраторам и редакторам просматривать, искать и экспортировать entries из форм.
+A WordPress plugin for managing Gravity Forms entries. Allows administrators and editors to view, search, and export entries from forms in one convenient location.
 
-## Возможности
+## Features
 
-- 📊 Просмотр всех entries Gravity Forms в одном месте
-- 🔍 Поиск по entries
-- 📥 Экспорт в CSV
-- 👥 Доступ для Администраторов и Редакторов
-- 🎨 Интегрирован с WordPress Admin панелью
+- 📊 View all Gravity Forms entries in one place
+- 🔍 Search across entries
+- 📥 Export to CSV
+- 👥 Access for Administrators and Editors
+- 🎨 Seamlessly integrated with WordPress Admin panel
 
-## Требования
+## Requirements
 
 - WordPress 5.0+
-- Gravity Forms плагин установлен и активирован
+- Gravity Forms plugin installed and activated
 - PHP 7.2+
 
-## Установка
+## Installation
 
-1. Загрузите файлы плагина в папку `/wp-content/plugins/gf-leads-manager/`
-2. Активируйте плагин в WordPress админ-панели
-3. Перейдите на страницу **LEADS (GF)** в главном меню админ-панели
+1. Upload the plugin files to the `/wp-content/plugins/gf-leads-manager/` directory
+2. Activate the plugin through the WordPress admin panel
+3. Navigate to the **LEADS (GF)** page in the main admin menu
 
-## Использование
+## Usage
 
-После активации плагина:
-- В админ-меню появится пункт **LEADS (GF)**
-- Можно просматривать все entries из Gravity Forms
-- Доступны функции поиска и экспорта в CSV
+After activating the plugin:
+- A new **LEADS (GF)** menu item will appear in the admin menu
+- View all Gravity Forms entries in a convenient table format
+- Use search and CSV export functionality to manage your data
 
-## Версия
+## Version
 
 1.1
 
-## Автор
+## Author
 
 Ranked (https://ranked.net.au)
 
-## Лицензия
+## License
 
-GPL v2 или выше. Смотрите файл LICENSE для деталей.
+GPL v2 or later. See the LICENSE file for details.
