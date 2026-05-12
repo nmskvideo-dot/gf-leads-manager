@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Leads (GF) Manager
  * Description: Displays Gravity Forms entries for Admins and Editors with export and search.
- * Version: 1.7
+ * Version: 1.8
  * Author: Ranked
  * Author URI: https://ranked.net.au
  * GitHub Plugin URI: https://github.com/nmskvideo-dot/gf-leads-manager
@@ -14,6 +14,9 @@ class GF_Leads_Manager {
 
     private $page_slug = 'gf-leads-manager';
     private $capability = 'edit_pages';
+    private $export_nonce_action = 'gf_leads_manager_export';
+    private $export_nonce_name = 'gf_leads_manager_nonce';
+    private $max_export_entries = 5000;
     
     // Update system properties
     private $github_repo = 'nmskvideo-dot/gf-leads-manager';
@@ -183,15 +186,26 @@ class GF_Leads_Manager {
     }
 
     public function render_admin_page() {
-        if (!class_exists('GFAPI')) return;
+        if (!current_user_can($this->capability)) {
+            wp_die(esc_html('You do not have permission to view this page.'));
+        }
 
-        $search_query = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
-        $paged = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
-        $per_page = isset($_GET['per_page']) ? (($_GET['per_page'] === 'all') ? 9999 : intval($_GET['per_page'])) : 30;
+        if (!class_exists('GFAPI')) {
+            echo '<div class="wrap"><div class="notice notice-error"><p>' . esc_html('Gravity Forms must be active to use Ranked Leads.') . '</p></div></div>';
+            return;
+        }
 
-        $search_criteria = !empty($search_query) ? ['field_filters' => [['key' => '0', 'operator' => 'contains', 'value' => $search_query]]] : [];
+        $search_query = $this->get_search_query();
+        $paged = max(1, absint($this->get_query_value('paged')));
+        $per_page = $this->get_per_page();
+
+        $search_criteria = $this->get_search_criteria($search_query);
         $entries = GFAPI::get_entries(0, $search_criteria, ['key' => 'date_created', 'direction' => 'DESC'], ['offset' => ($paged - 1) * $per_page, 'page_size' => $per_page], $total_count);
-        $total_pages = ceil($total_count / $per_page);
+        if (is_wp_error($entries)) {
+            $entries = [];
+            $total_count = 0;
+        }
+        $total_pages = max(1, ceil($total_count / $per_page));
 
         ?>
         <div class="wrap">
@@ -199,7 +213,8 @@ class GF_Leads_Manager {
             <hr class="wp-header-end">
             
             <form method="get">
-                <input type="hidden" name="page" value="<?php echo $this->page_slug; ?>">
+                <input type="hidden" name="page" value="<?php echo esc_attr($this->page_slug); ?>">
+                <?php wp_nonce_field($this->export_nonce_action, $this->export_nonce_name); ?>
                 <div class="search-box-custom">
                     <div class="controls-left">
                         <input type="search" name="s" value="<?php echo esc_attr($search_query); ?>" placeholder="Search...">
@@ -210,9 +225,9 @@ class GF_Leads_Manager {
                             foreach ($options as $opt) {
                                 printf(
                                     '<option value="%s" %s>%s per page</option>', 
-                                    $opt, 
+                                    esc_attr($opt),
                                     selected($per_page, ($opt === 'all' ? 9999 : $opt), false), 
-                                    $opt
+                                    esc_html($opt)
                                 );
                             }
                             ?>
@@ -239,11 +254,14 @@ class GF_Leads_Manager {
                     </thead>
                     <tbody>
                         <?php if ($entries): foreach ($entries as $entry): 
-                            $form = GFAPI::get_form($entry['form_id']); 
+                            $entry_id = absint($entry['id']);
+                            $form = $this->get_form($entry['form_id']);
+                            $form_title = isset($form['title']) ? $form['title'] : 'Unknown form';
+                            $form_fields = isset($form['fields']) && is_array($form['fields']) ? $form['fields'] : [];
                         ?>
                             <tr>
-                                <td><input type="checkbox" name="export_ids[]" value="<?php echo $entry['id']; ?>" class="entry-checkbox"></td>
-                                <td><?php echo esc_html($form['title']); ?></td>
+                                <td><input type="checkbox" name="export_ids[]" value="<?php echo esc_attr($entry_id); ?>" class="entry-checkbox"></td>
+                                <td><?php echo esc_html($form_title); ?></td>
                                 <td><?php echo esc_html(date('d.m.Y H:i', strtotime($entry['date_created']))); ?></td>
                                 <td><?php echo esc_html($this->get_field_val($entry, ['name', 'имя'])); ?></td>
                                 <td class="message-cell">
@@ -255,14 +273,15 @@ class GF_Leads_Manager {
                                 <td><?php echo esc_html($this->get_field_val($entry, ['phone', 'телефон'])); ?></td>
                                 <td><?php echo esc_html($this->get_field_val($entry, ['email', 'почта'])); ?></td>
                                 <td>
-                                    <button type="button" class="button view-info" data-id="<?php echo $entry['id']; ?>">Info</button>
-                                    <div id="entry-data-<?php echo $entry['id']; ?>" style="display:none;">
+                                    <button type="button" class="button view-info" data-id="<?php echo esc_attr($entry_id); ?>">Info</button>
+                                    <div id="entry-data-<?php echo esc_attr($entry_id); ?>" style="display:none;">
                                         <?php 
-                                        foreach ($form['fields'] as $field) {
+                                        foreach ($form_fields as $field) {
                                             $val = GFFormsModel::get_lead_field_value($entry, $field);
-                                            $display_val = GFCommon::get_lead_field_display($field, $val, $entry['currency']);
-                                            if (!empty($display_val) && $field->type !== 'section') {
-                                                echo '<div class="entry-detail-row"><span class="entry-label">' . esc_html($field->label) . ':</span><span>' . $display_val . '</span></div>';
+                                            $display_val = GFCommon::get_lead_field_display($field, $val, isset($entry['currency']) ? $entry['currency'] : '');
+                                            if (!empty($display_val) && (!isset($field->type) || $field->type !== 'section')) {
+                                                $field_label = isset($field->label) ? $field->label : '';
+                                                echo '<div class="entry-detail-row"><span class="entry-label">' . esc_html($field_label) . ':</span><span>' . wp_kses_post($display_val) . '</span></div>';
                                             }
                                         } 
                                         ?>
@@ -276,7 +295,12 @@ class GF_Leads_Manager {
                 </table>
                 <div class="tablenav bottom">
                     <div class="tablenav-pages">
-                        <?php echo paginate_links(['total' => $total_pages, 'current' => $paged, 'base' => add_query_arg('paged', '%#%'), 'format' => '']); ?>
+                        <?php
+                        $pagination_links = paginate_links(['total' => $total_pages, 'current' => $paged, 'base' => add_query_arg('paged', '%#%'), 'format' => '']);
+                        if (!empty($pagination_links)) {
+                            echo wp_kses_post($pagination_links);
+                        }
+                        ?>
                     </div>
                 </div>
             </form>
@@ -285,10 +309,19 @@ class GF_Leads_Manager {
     }
 
     private function get_field_val($entry, $hints) {
-        $form = GFAPI::get_form($entry['form_id']);
+        $form = $this->get_form($entry['form_id']);
+        if (empty($form['fields']) || !is_array($form['fields'])) {
+            return '-';
+        }
+
         foreach ($form['fields'] as $field) {
+            $field_label = isset($field->label) ? (string) $field->label : '';
+            if ($field_label === '') {
+                continue;
+            }
+
             foreach ($hints as $hint) {
-                if (stripos($field->label, $hint) !== false) {
+                if (stripos($field_label, $hint) !== false) {
                     $val = GFFormsModel::get_lead_field_value($entry, $field);
                     return is_array($val) ? implode(' ', $val) : $val;
                 }
@@ -298,28 +331,35 @@ class GF_Leads_Manager {
     }
 
     public function handle_csv_export() {
-        if (!isset($_GET['action']) || !in_array($_GET['action'], ['export_all', 'export_selected'])) return;
-        if (!current_user_can($this->capability)) return;
+        if (!$this->is_plugin_page_request()) return;
 
-        $export_ids = isset($_GET['export_ids']) ? array_map('intval', $_GET['export_ids']) : [];
-        $entries = ($_GET['action'] === 'export_all') 
-            ? GFAPI::get_entries(0, [], ['key' => 'date_created', 'direction' => 'DESC'], ['offset' => 0, 'page_size' => 5000]) 
-            : array_filter(array_map(['GFAPI', 'get_entry'], $export_ids));
+        $action = $this->get_export_action();
+        if (!$action) return;
+        if (!current_user_can($this->capability)) return;
+        check_admin_referer($this->export_nonce_action, $this->export_nonce_name);
+
+        if (!class_exists('GFAPI')) {
+            wp_die(esc_html('Gravity Forms must be active to export Ranked Leads.'));
+        }
+
+        $entries = $this->get_entries_for_export($action);
 
         if (empty($entries)) return;
 
+        nocache_headers();
+        send_nosniff_header();
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename=ranked_leads_' . date('Y-m-d') . '.csv');
         
         $output = fopen('php://output', 'w');
         fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
         
-        fputcsv($output, ['ID', 'Form', 'Date', 'Name', 'Message', 'Phone', 'Email']);
+        $this->write_csv_row($output, ['ID', 'Form', 'Date', 'Name', 'Message', 'Phone', 'Email']);
         
         foreach ($entries as $entry) {
-            fputcsv($output, [
+            $this->write_csv_row($output, [
                 $entry['id'], 
-                GFAPI::get_form($entry['form_id'])['title'], 
+                $this->get_form_title($entry['form_id']),
                 $entry['date_created'], 
                 $this->get_field_val($entry, ['name', 'имя']), 
                 $this->get_field_val($entry, ['message', 'сообщение']), 
@@ -329,6 +369,125 @@ class GF_Leads_Manager {
         }
         fclose($output); 
         exit;
+    }
+
+    private function is_plugin_page_request() {
+        $page = sanitize_key($this->get_query_value('page'));
+        return $page === $this->page_slug;
+    }
+
+    private function get_export_action() {
+        $action = sanitize_key($this->get_query_value('action'));
+        return in_array($action, ['export_all', 'export_selected'], true) ? $action : '';
+    }
+
+    private function get_search_query() {
+        return sanitize_text_field($this->get_query_value('s'));
+    }
+
+    private function get_search_criteria($search_query) {
+        return !empty($search_query) ? ['field_filters' => [['key' => '0', 'operator' => 'contains', 'value' => $search_query]]] : [];
+    }
+
+    private function get_per_page() {
+        $allowed_per_page = [30, 50, 100, 200, 500];
+
+        $per_page = sanitize_text_field($this->get_query_value('per_page'));
+        if ($per_page === '') {
+            return 30;
+        }
+
+        if ($per_page === 'all') {
+            return 9999;
+        }
+
+        $per_page = absint($per_page);
+        return in_array($per_page, $allowed_per_page, true) ? $per_page : 30;
+    }
+
+    private function get_entries_for_export($action) {
+        if ($action === 'export_all') {
+            $search_query = $this->get_search_query();
+            $entries = GFAPI::get_entries(
+                0,
+                $this->get_search_criteria($search_query),
+                ['key' => 'date_created', 'direction' => 'DESC'],
+                ['offset' => 0, 'page_size' => $this->max_export_entries]
+            );
+
+            return is_wp_error($entries) ? [] : $entries;
+        }
+
+        $entries = [];
+        foreach ($this->get_selected_export_ids() as $entry_id) {
+            $entry = GFAPI::get_entry($entry_id);
+            if (!is_wp_error($entry) && is_array($entry)) {
+                $entries[] = $entry;
+            }
+        }
+
+        return $entries;
+    }
+
+    private function get_query_value($key) {
+        if (!isset($_GET[$key])) {
+            return '';
+        }
+
+        $value = wp_unslash($_GET[$key]);
+        return is_scalar($value) ? (string) $value : '';
+    }
+
+    private function get_selected_export_ids() {
+        if (!isset($_GET['export_ids'])) {
+            return [];
+        }
+
+        $raw_ids = wp_unslash($_GET['export_ids']);
+        if (!is_array($raw_ids)) {
+            return [];
+        }
+
+        $raw_ids = array_filter($raw_ids, 'is_scalar');
+        $ids = array_map('absint', $raw_ids);
+        $ids = array_values(array_filter(array_unique($ids)));
+
+        return array_slice($ids, 0, $this->max_export_entries);
+    }
+
+    private function get_form($form_id) {
+        $form = GFAPI::get_form($form_id);
+        return (!is_wp_error($form) && is_array($form)) ? $form : [];
+    }
+
+    private function get_form_title($form_id) {
+        $form = $this->get_form($form_id);
+        return isset($form['title']) ? $form['title'] : 'Unknown form';
+    }
+
+    private function write_csv_row($output, $row) {
+        fputcsv($output, array_map([$this, 'prepare_csv_cell'], $row));
+    }
+
+    private function prepare_csv_cell($value) {
+        if (is_array($value)) {
+            $value = implode(' ', $value);
+        } elseif (is_object($value)) {
+            $value = wp_json_encode($value);
+        }
+
+        $value = (string) $value;
+        $trimmed_value = ltrim($value);
+
+        if ($trimmed_value !== '' && in_array($trimmed_value[0], ['=', '+', '-', '@'], true)) {
+            return "'" . $value;
+        }
+
+        if ($value !== '' && preg_match('/^[\t\r\n]/', $value)) {
+            return "'" . $value;
+        }
+
+        return $value;
     }
 }
 new GF_Leads_Manager();

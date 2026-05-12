@@ -72,7 +72,7 @@ The plugin automatically detects common field names:
 
 ## Version
 
-1.7
+1.8
 
 ## Author
 
